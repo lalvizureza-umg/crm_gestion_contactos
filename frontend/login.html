@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRM Ing Software — Iniciar Sesión</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    body { display: block; }
+    .login-page { display: flex; }
+  </style>
+</head>
+<body>
+  <div class="login-page">
+
+    <!-- LEFT PANEL -->
+    <div class="login-left">
+      <div class="login-grid-bg"></div>
+      <div class="login-left-content">
+        <div class="login-brand-icon">⚙️</div>
+        <div class="login-brand-name">CRM<br><span>Ing Software</span></div>
+        <div class="login-brand-sub">Sistema de Gestión Empresarial</div>
+
+        <div class="login-features">
+          <div class="login-feature">
+            <div class="login-feature-icon">👥</div>
+            <div class="login-feature-text">
+              <strong>Gestión de Clientes</strong>
+              Administra clientes y prospectos con sus contactos
+            </div>
+          </div>
+          <div class="login-feature">
+            <div class="login-feature-icon">🏢</div>
+            <div class="login-feature-text">
+              <strong>Control de Proveedores</strong>
+              Registro completo con categorías y estados
+            </div>
+          </div>
+          <div class="login-feature">
+            <div class="login-feature-icon">📊</div>
+            <div class="login-feature-text">
+              <strong>Dashboard Inteligente</strong>
+              Estadísticas y cumpleañeros del mes en tiempo real
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="login-right">
+      <div class="login-form-wrap">
+        <div class="login-form-title">Bienvenido</div>
+        <div class="login-form-sub">Ingresa tus credenciales para continuar</div>
+
+        <div id="login-error-js" class="login-error" style="display:none;"></div>
+
+        <div class="login-field">
+          <label>Usuario</label>
+          <div class="login-input-wrap">
+            <span class="login-input-icon">👤</span>
+            <input type="text" id="username" class="login-input" placeholder="Ingresa tu usuario" autocomplete="username">
+          </div>
+        </div>
+
+        <div class="login-field">
+          <label>Contraseña</label>
+          <div class="login-input-wrap">
+            <span class="login-input-icon">🔒</span>
+            <input type="password" id="password" class="login-input" placeholder="Ingresa tu contraseña" autocomplete="current-password">
+          </div>
+        </div>
+
+        <button class="login-btn" id="login-btn" onclick="doLogin()">
+          <span id="btn-text">Iniciar Sesión</span>
+          <span id="btn-arrow">→</span>
+        </button>
+
+        <div class="login-hint">
+          Credenciales por defecto: <span>admin</span> / <span>admin123</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script>
+    // Redirigir si ya está autenticado
+    if (isAuthenticated()) {
+      window.location.href = '/dashboard.html';
+    }
+
+    // Allow Enter key
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('username').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('password').focus();
+    });
+
+    async function doLogin() {
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errEl    = document.getElementById('login-error-js');
+      const btn      = document.getElementById('login-btn');
+
+      errEl.style.display = 'none';
+
+      if (!username || !password) {
+        errEl.textContent = '⚠️ Por favor completa todos los campos.';
+        errEl.style.display = 'flex';
+        return;
+      }
+
+      btn.disabled = true;
+      document.getElementById('btn-text').textContent = 'Verificando...';
+      document.getElementById('btn-arrow').textContent = '⏳';
+
+      try {
+        const res = await fetch(`${CONFIG.API_BASE_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          setToken(data.token);
+          setUser(data.user);
+          document.getElementById('btn-text').textContent = '¡Acceso concedido!';
+          document.getElementById('btn-arrow').textContent = '✓';
+          setTimeout(() => { window.location.href = '/dashboard.html'; }, 500);
+        } else {
+          errEl.textContent = '⚠️ ' + (data.error || 'Credenciales incorrectas.');
+          errEl.style.display = 'flex';
+          btn.disabled = false;
+          document.getElementById('btn-text').textContent = 'Iniciar Sesión';
+          document.getElementById('btn-arrow').textContent = '→';
+        }
+      } catch (e) {
+        errEl.textContent = '⚠️ Error de conexión. Verifica que el servidor backend esté ejecutándose.';
+        errEl.style.display = 'flex';
+        btn.disabled = false;
+        document.getElementById('btn-text').textContent = 'Iniciar Sesión';
+        document.getElementById('btn-arrow').textContent = '→';
+      }
+    }
+  </script>
+</body>
+</html>
