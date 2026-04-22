@@ -195,6 +195,125 @@ function mostrarError(elementId, mensaje) {
     }
 }
 
+/* ── Validaciones de contacto por tipo ─────────────────── */
+const validacionesContacto = {
+    'Email': {
+        validar: (valor) => {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(valor);
+        },
+        mensaje: 'Ingrese un email válido (ej: usuario@dominio.com)',
+        placeholder: 'usuario@dominio.com'
+    },
+    'Teléfono': {
+        validar: (valor) => {
+            const soloNumeros = /^\d+$/;
+            return soloNumeros.test(valor) && valor.length === 8;
+        },
+        mensaje: 'El teléfono debe tener exactamente 8 dígitos numéricos',
+        placeholder: '12345678'
+    },
+    'Celular': {
+        validar: (valor) => {
+            const soloNumeros = /^\d+$/;
+            return soloNumeros.test(valor) && valor.length === 8;
+        },
+        mensaje: 'El celular debe tener exactamente 8 dígitos numéricos',
+        placeholder: '12345678'
+    },
+    'Fax': {
+        validar: (valor) => {
+            const soloNumeros = /^\d+$/;
+            return soloNumeros.test(valor) && valor.length === 8;
+        },
+        mensaje: 'El fax debe tener exactamente 8 dígitos numéricos',
+        placeholder: '12345678'
+    },
+    'Página web': {
+        validar: (valor) => {
+            const webRegex = /^(https?:\/\/|www\.)/i;
+            return webRegex.test(valor);
+        },
+        mensaje: 'La página web debe iniciar con www. o http://',
+        placeholder: 'www.ejemplo.com'
+    },
+    'Dirección': {
+        validar: (valor) => valor.trim().length > 0,
+        mensaje: 'Ingrese una dirección válida',
+        placeholder: 'Calle, número, zona, ciudad'
+    }
+};
+
+function validarContactoIndividual(tipoContacto, valor) {
+    if (!valor.trim()) {
+        return { valido: false, mensaje: 'Ingrese la descripción' };
+    }
+    
+    const validacion = validacionesContacto[tipoContacto];
+    if (validacion && !validacion.validar(valor)) {
+        return { valido: false, mensaje: validacion.mensaje };
+    }
+    
+    return { valido: true, mensaje: '' };
+}
+
+function getPlaceholderPorTipo(tipoContacto) {
+    const validacion = validacionesContacto[tipoContacto];
+    return validacion ? validacion.placeholder : 'Ingrese el valor';
+}
+
+function onTipoContactoChange(idx) {
+    const tipoSelect = document.getElementById(`contacto_tipo_${idx}`);
+    const descInput = document.getElementById(`contacto_desc_${idx}`);
+    
+    if (tipoSelect && descInput) {
+        const tipoSeleccionado = tipoSelect.value;
+        descInput.placeholder = getPlaceholderPorTipo(tipoSeleccionado);
+        
+        // Limpiar error previo al cambiar tipo
+        const errorEl = document.getElementById(`error-contacto_desc_${idx}`);
+        if (errorEl) {
+            errorEl.style.display = 'none';
+            errorEl.textContent = '';
+        }
+        descInput.classList.remove('input-error');
+        
+        // Validar valor actual si existe
+        if (descInput.value.trim() && tipoSeleccionado) {
+            validarInputContactoEnTiempoReal(idx);
+        }
+    }
+}
+
+function validarInputContactoEnTiempoReal(idx) {
+    const tipoSelect = document.getElementById(`contacto_tipo_${idx}`);
+    const descInput = document.getElementById(`contacto_desc_${idx}`);
+    const errorEl = document.getElementById(`error-contacto_desc_${idx}`);
+    
+    if (!tipoSelect || !descInput || !errorEl) return;
+    
+    const tipoContacto = tipoSelect.value;
+    const valor = descInput.value;
+    
+    if (!tipoContacto || !valor.trim()) {
+        errorEl.style.display = 'none';
+        descInput.classList.remove('input-error');
+        return;
+    }
+    
+    const resultado = validarContactoIndividual(tipoContacto, valor);
+    
+    if (!resultado.valido) {
+        errorEl.textContent = resultado.mensaje;
+        errorEl.style.display = 'block';
+        descInput.classList.add('input-error');
+    } else {
+        errorEl.style.display = 'none';
+        errorEl.textContent = '';
+        descInput.classList.remove('input-error');
+    }
+}
+
 async function cargarTiposCliente() {
     try {
         const res = await apiFetch('/api/clientes/tipos-cliente');
@@ -227,7 +346,8 @@ async function cargarTiposContacto() {
             { id: 2, descripcion: 'Celular' },
             { id: 3, descripcion: 'Email' },
             { id: 4, descripcion: 'Dirección' },
-            { id: 5, descripcion: 'Fax' }
+            { id: 5, descripcion: 'Fax' },
+            { id: 6, descripcion: 'Página web' }
         ];
     }
 }
@@ -272,6 +392,9 @@ function agregarContacto(contactoData = null) {
         return `<option value="${t.descripcion}" ${isSelected ? 'selected' : ''}>${t.descripcion}</option>`;
     }).join('');
     
+    const tipoSeleccionado = contactoData?.tipo_contacto || '';
+    const placeholder = getPlaceholderPorTipo(tipoSeleccionado);
+    
     const div = document.createElement('div');
     div.className = 'contacto-card';
     div.id = `contacto-${idx}`;
@@ -279,7 +402,7 @@ function agregarContacto(contactoData = null) {
         <input type="hidden" name="contacto_id_${idx}" value="${contactoData?.id_contacto || ''}">
         <div class="form-group">
             <label style="font-size:0.75rem;font-weight:500;color:var(--text2);">Tipo Contacto</label>
-            <select name="contacto_tipo_${idx}" id="contacto_tipo_${idx}">
+            <select name="contacto_tipo_${idx}" id="contacto_tipo_${idx}" onchange="onTipoContactoChange(${idx})">
                 <option value="">Seleccione tipo</option>
                 ${tipoOptions}
             </select>
@@ -287,7 +410,10 @@ function agregarContacto(contactoData = null) {
         </div>
         <div class="form-group">
             <label style="font-size:0.75rem;font-weight:500;color:var(--text2);">Descripción</label>
-            <input type="text" name="contacto_desc_${idx}" id="contacto_desc_${idx}" placeholder="Ingrese el valor" value="${contactoData?.descripcion || ''}">
+            <input type="text" name="contacto_desc_${idx}" id="contacto_desc_${idx}" 
+                   placeholder="${placeholder}" 
+                   value="${contactoData?.descripcion || ''}"
+                   oninput="validarInputContactoEnTiempoReal(${idx})">
             <div id="error-contacto_desc_${idx}" class="error-msg" style="display:none;"></div>
         </div>
         <button type="button" class="btn btn-ghost btn-sm btn-icon btn-remove" onclick="eliminarContacto(${idx})" title="Eliminar">🗑️</button>
@@ -365,6 +491,7 @@ function validarFormulario() {
         const tipoId = tipoSelect?.id;
         const descId = descInput?.id;
         
+        // Validar que se haya seleccionado un tipo
         if (tipoSelect && !tipoSelect.value) {
             const errorEl = document.getElementById(`error-${tipoId}`);
             if (errorEl) {
@@ -376,15 +503,34 @@ function validarFormulario() {
             tieneErroresContactos = true;
         }
         
-        if (descInput && !descInput.value.trim()) {
-            const errorEl = document.getElementById(`error-${descId}`);
-            if (errorEl) {
-                errorEl.textContent = 'Ingrese la descripción';
-                errorEl.style.display = 'block';
+        // Validar descripción con las reglas específicas por tipo
+        if (descInput && tipoSelect) {
+            const tipoContacto = tipoSelect.value;
+            const valorDesc = descInput.value;
+            
+            if (!valorDesc.trim()) {
+                const errorEl = document.getElementById(`error-${descId}`);
+                if (errorEl) {
+                    errorEl.textContent = 'Ingrese la descripción';
+                    errorEl.style.display = 'block';
+                }
+                descInput.classList.add('input-error');
+                isValid = false;
+                tieneErroresContactos = true;
+            } else if (tipoContacto) {
+                // Validar formato según el tipo de contacto
+                const resultado = validarContactoIndividual(tipoContacto, valorDesc);
+                if (!resultado.valido) {
+                    const errorEl = document.getElementById(`error-${descId}`);
+                    if (errorEl) {
+                        errorEl.textContent = resultado.mensaje;
+                        errorEl.style.display = 'block';
+                    }
+                    descInput.classList.add('input-error');
+                    isValid = false;
+                    tieneErroresContactos = true;
+                }
             }
-            descInput.classList.add('input-error');
-            isValid = false;
-            tieneErroresContactos = true;
         }
     });
     
