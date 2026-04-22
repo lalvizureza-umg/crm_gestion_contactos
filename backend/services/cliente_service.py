@@ -203,5 +203,6 @@ def get_tipos_contacto():
         {"id": 2, "descripcion": "Celular"},
         {"id": 3, "descripcion": "Email"},
         {"id": 4, "descripcion": "Dirección"},
-        {"id": 5, "descripcion": "Fax"}
+        {"id": 5, "descripcion": "Fax"},
+        {"id": 6, "descripcion": "Página web"}
     ]
