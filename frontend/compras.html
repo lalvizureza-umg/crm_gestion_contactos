@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:5000;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Compras — CRM Ing Software</title>
   <link rel="stylesheet" href="css/styles.css">
@@ -55,7 +56,7 @@
             <option value="">Todos</option>
             <option>Pendiente</option>
             <option>Pagado</option>
-            <option>Cancelado</option>
+            <option value="Anulado">Anulado</option>
           </select>
         </div>
         <div style="display:flex;gap:8px;align-items:flex-end;">
@@ -99,7 +100,7 @@
           <select id="nuevo-estado">
             <option value="Pagado">Pagado</option>
             <option value="Pendiente">Pendiente</option>
-            <option value="Cancelado">Cancelado</option>
+            <option value="Anulado">Anulado</option>
           </select>
         </div>
       </div>

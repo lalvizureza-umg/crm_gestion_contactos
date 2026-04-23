@@ -1228,3 +1228,49 @@ tbody tr:hover { background: rgba(255,255,255,0.02); }
   .login-right { width: 100%; }
   .stats-grid { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SIDEBAR MOBILE (added by fix)
+══════════════════════════════════════════════════════════ */
+.sidebar-toggle {
+  display: none;
+  position: fixed;
+  top: 14px; left: 14px;
+  z-index: 200;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 1.3rem;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 99;
+}
+
+.sidebar-overlay.overlay-visible { display: block; }
+
+@media (max-width: 767px) {
+  .sidebar-toggle { display: block; }
+  .sidebar {
+    position: fixed;
+    left: calc(-1 * var(--sidebar-w));
+    top: 0; bottom: 0;
+    z-index: 100;
+    transition: left 0.25s ease;
+  }
+  .sidebar.sidebar-open { left: 0; }
+  .main { margin-left: 0 !important; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOAST improvements
+══════════════════════════════════════════════════════════ */
+.toast { transition: opacity 0.3s ease, transform 0.3s ease; opacity: 0; transform: translateY(10px); }
+.toast.toast-show { opacity: 1; transform: translateY(0); }

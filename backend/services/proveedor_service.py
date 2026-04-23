@@ -1,165 +1,143 @@
 """
 proveedor_service.py - Capa de lógica de negocio para Proveedores
-Contiene validaciones, transformaciones y orquestación de repositorios
+v3:
+  - Filtro por estado (Activo/Inactivo)
+  - Nuevo parámetro 'busqueda': busca OR en nombre_empresa y nit
+  - Mensajes de error descriptivos
 """
+import logging
+from database import to_int, sp_result
 from repositories import proveedor_repository as repo
 
+logger = logging.getLogger(__name__)
 
-def get_all_proveedores(nombre=None, nit=None, categoria=None, page=1, per_page=20):
-    """
-    Obtiene todos los proveedores con filtros opcionales y paginación.
-    
-    Args:
-        nombre: Filtro por nombre de empresa (parcial)
-        nit: Filtro por NIT (parcial)
-        categoria: Filtro por nombre de categoría
-        page: Número de página (default 1)
-        per_page: Resultados por página (default 20)
-    
-    Returns:
-        dict con proveedores, total, page y per_page
-    """
+_MAX_PER_PAGE     = 100
+_DEFAULT_PER_PAGE = 20
+
+
+def _sanitize(value, max_len=500) -> str:
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:max_len]
+
+
+def get_all_proveedores(nombre=None, nit=None, categoria=None, estado=None,
+                        busqueda=None, page=1, per_page=_DEFAULT_PER_PAGE):
+    try:
+        page     = max(1, int(page))
+        per_page = min(max(1, int(per_page)), _MAX_PER_PAGE)
+    except (ValueError, TypeError):
+        page, per_page = 1, _DEFAULT_PER_PAGE
+
     where_clauses = ["1=1"]
     params = []
-    
-    if nombre:
-        where_clauses.append("p.nombre_empresa LIKE %s")
-        params.append(f"%{nombre}%")
-    if nit:
-        where_clauses.append("p.nit LIKE %s")
-        params.append(f"%{nit}%")
+
+    # INCONSISTENCIA #2 CORREGIDA:
+    # 'busqueda' hace OR entre nombre_empresa y nit en un solo campo
+    if busqueda:
+        term = f"%{_sanitize(busqueda)}%"
+        where_clauses.append("(p.nombre_empresa LIKE %s OR p.nit LIKE %s)")
+        params.extend([term, term])
+    else:
+        if nombre:
+            where_clauses.append("p.nombre_empresa LIKE %s")
+            params.append(f"%{_sanitize(nombre)}%")
+        if nit:
+            where_clauses.append("p.nit LIKE %s")
+            params.append(f"%{_sanitize(nit, 30)}%")
+
     if categoria:
         where_clauses.append("c.nombre_categoria = %s")
-        params.append(categoria)
-    
+        params.append(_sanitize(categoria, 100))
+    if estado in ("Activo", "Inactivo"):
+        where_clauses.append("p.estado = %s")
+        params.append(estado)
+
     offset = (page - 1) * per_page
     proveedores, total = repo.find_all(where_clauses, params, offset, per_page)
-    
+
+    total_pages = max(1, (total + per_page - 1) // per_page)
     return {
-        "proveedores": proveedores,
-        "total": total,
-        "page": page,
-        "per_page": per_page
+        "proveedores":       proveedores,
+        "total":             total,
+        "page":              page,
+        "per_page":          per_page,
+        "total_pages":       total_pages,
+        "has_next_page":     page < total_pages,
+        "has_previous_page": page > 1,
     }
 
 
 def get_proveedor_by_id(id_proveedor):
-    """
-    Obtiene un proveedor por su ID.
-    
-    Args:
-        id_proveedor: ID del proveedor
-    
-    Returns:
-        dict con datos del proveedor o None si no existe
-    """
     return repo.find_by_id(id_proveedor)
 
 
 def get_categorias():
-    """
-    Obtiene todas las categorías de proveedores activas.
-    
-    Returns:
-        Lista de categorías con id y nombre
-    """
     return repo.find_all_categorias()
 
 
-def create_proveedor(data):
-    """
-    Crea un nuevo proveedor.
-    
-    Args:
-        data: dict con los datos del proveedor
-            - nombre_empresa (requerido)
-            - nit (requerido)
-            - id_categoria (requerido)
-            - telefono (requerido)
-            - contacto (opcional)
-            - correo (opcional)
-            - direccion (opcional)
-            - notas (opcional)
-            - usuario (opcional, default 'sistema')
-    
-    Returns:
-        dict con id_proveedor y mensaje, o error
-    """
-    row = repo.insert(data)
-    
-    if row and isinstance(row[0], int):
-        return {"id_proveedor": row[0], "mensaje": row[1]}
-    return {"error": row[1] if row else "Error desconocido"}
+def create_proveedor(data: dict):
+    nombre   = _sanitize(data.get("nombre_empresa", ""))
+    nit      = _sanitize(data.get("nit", ""), 30)
+    telefono = _sanitize(data.get("telefono", ""), 20)
+
+    errors = []
+    if not nombre:
+        errors.append("El nombre de la empresa es obligatorio.")
+    if not nit:
+        errors.append("El NIT es obligatorio.")
+    if not data.get("id_categoria"):
+        errors.append("La categoría es obligatoria.")
+    if not telefono:
+        errors.append("El teléfono es obligatorio.")
+
+    if errors:
+        return {"error": errors[0], "errores": errors}
+
+    clean_data = {**data, "nombre_empresa": nombre, "nit": nit, "telefono": telefono}
+    row = repo.insert(clean_data)
+    id_prov, mensaje, is_error = sp_result(row)
+    if is_error:
+        return {"error": mensaje or "Error al registrar el proveedor."}
+    return {"id_proveedor": id_prov, "mensaje": mensaje}
 
 
-def update_proveedor(id_proveedor, data):
-    """
-    Actualiza un proveedor existente.
-    
-    Args:
-        id_proveedor: ID del proveedor a actualizar
-        data: dict con los datos a actualizar
-    
-    Returns:
-        dict con id_proveedor y mensaje, o error
-    """
-    row = repo.update(id_proveedor, data)
-    
-    if row and isinstance(row[0], int):
-        return {"id_proveedor": row[0], "mensaje": row[1]}
-    return {"error": row[1] if row else "Error desconocido"}
+def update_proveedor(id_proveedor, data: dict):
+    nombre = _sanitize(data.get("nombre_empresa", ""))
+    if not nombre:
+        return {"error": "El nombre de la empresa es obligatorio."}
+
+    clean_data = {**data, "nombre_empresa": nombre}
+    row = repo.update(id_proveedor, clean_data)
+    id_prov, mensaje, is_error = sp_result(row)
+    if is_error:
+        return {"error": mensaje or "Error al actualizar el proveedor."}
+    return {"id_proveedor": id_prov, "mensaje": mensaje}
 
 
 def inactivar_proveedor(id_proveedor, motivo, usuario="sistema"):
-    """
-    Inactiva un proveedor.
-    
-    Args:
-        id_proveedor: ID del proveedor
-        motivo: Motivo de inactivación (requerido)
-        usuario: Usuario que realiza la acción
-    
-    Returns:
-        dict con mensaje de éxito o error
-    """
-    if not motivo or not motivo.strip():
+    motivo = _sanitize(motivo, 500)
+    if not motivo:
         return {"error": "El motivo de inactivación es obligatorio."}
-    
-    row = repo.set_inactive(id_proveedor, motivo.strip(), usuario)
-    
-    if row and isinstance(row[0], int):
-        return {"mensaje": row[1]}
-    return {"error": row[1] if row else "Error desconocido"}
+
+    row = repo.set_inactive(id_proveedor, motivo, _sanitize(usuario))
+    id_res, mensaje, is_error = sp_result(row)
+    if is_error:
+        return {"error": mensaje or "Error al inactivar el proveedor."}
+    return {"mensaje": mensaje}
 
 
 def activar_proveedor(id_proveedor, usuario="sistema"):
-    """
-    Activa un proveedor previamente inactivado.
-    
-    Args:
-        id_proveedor: ID del proveedor
-        usuario: Usuario que realiza la acción
-    
-    Returns:
-        dict con mensaje de éxito o error
-    """
-    row = repo.set_active(id_proveedor, usuario)
-    return {"mensaje": row[1]} if row else {"error": "Error al activar"}
+    row = repo.set_active(id_proveedor, _sanitize(usuario))
+    id_res, mensaje, is_error = sp_result(row)
+    if is_error:
+        return {"error": mensaje or "Error al activar el proveedor."}
+    return {"mensaje": mensaje}
 
 
 def eliminar_proveedor(id_proveedor, usuario="sistema"):
-    """
-    Elimina un proveedor del sistema.
-    
-    Args:
-        id_proveedor: ID del proveedor
-        usuario: Usuario que realiza la acción
-    
-    Returns:
-        dict con mensaje de éxito o error
-    """
-    row = repo.delete(id_proveedor, usuario)
-    
-    if row and isinstance(row[0], int):
-        return {"mensaje": row[1]}
-    return {"error": row[1] if row else "Error desconocido"}
+    row = repo.delete(id_proveedor, _sanitize(usuario))
+    id_res, mensaje, is_error = sp_result(row)
+    if is_error:
+        return {"error": mensaje or "Error al eliminar el proveedor."}
+    return {"mensaje": mensaje}

@@ -1,29 +1,16 @@
 /**
  * clientes.js - Gestión de Clientes
+ * Correcciones:
+ *   - XSS: escapeHtml() en todos los datos insertados en innerHTML
+ *   - showToast movido a config.js (eliminada definición duplicada)
+ *   - renderPaginacion usa textContent para el texto de info
+ *   - inactivar usa apiJSON en lugar de apiFetch manual
  */
 
-/* ── Shared utilities ─────────────────────────────────── */
-function showToast(msg, type = 'success') {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const icons = { success: '✅', error: '❌', warning: '⚠️' };
-    const t = document.createElement('div');
-    t.className = `toast ${type}`;
-    t.innerHTML = `<span>${icons[type] || '💬'}</span><span>${msg}</span>`;
-    c.appendChild(t);
-    setTimeout(() => t.remove(), 4000);
-}
+function cerrarModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function abrirModal(id)  { document.getElementById(id)?.classList.add('open'); }
 
-function cerrarModal(id) {
-    document.getElementById(id).classList.remove('open');
-}
-
-function abrirModal(id) {
-    document.getElementById(id).classList.add('open');
-}
-
-/* ── LIST PAGE ────────────────────────────────────────── */
-let currentPage = 1;
+let currentPage      = 1;
 let pendingInactivarId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -35,48 +22,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function cargarClientes(page = 1) {
     currentPage = page;
-    const nombre    = document.getElementById('search-nombre')?.value || '';
-    const documento = document.getElementById('search-documento')?.value || '';
-    const tipo      = document.getElementById('search-tipo')?.value || '';
+    const nombre    = document.getElementById('search-nombre')?.value.trim()  || '';
+    const documento = document.getElementById('search-documento')?.value.trim()|| '';
+    const tipo      = document.getElementById('search-tipo')?.value            || '';
 
     const params = new URLSearchParams({ nombre, documento, tipo, page });
-    const tbody = document.getElementById('clientes-tbody');
+    const tbody  = document.getElementById('clientes-tbody');
     tbody.innerHTML = '<tr><td colspan="5" class="loading-overlay"><div class="spinner"></div></td></tr>';
 
     try {
-        const res = await apiFetch(`/api/clientes?${params}`);
-        if (!res) return;
-        const data = await res.json();
+        const data = await apiJSON(`/api/clientes?${params}`);
+        if (!data) return;
         renderTablaClientes(data);
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--danger)">Error al cargar datos.</td></tr>';
+        showToast('Error al cargar clientes', 'error');
     }
 }
 
 function renderTablaClientes(data) {
     const tbody = document.getElementById('clientes-tbody');
-    const { clientes, total, page, per_page } = data;
+    const { clientes = [], total = 0, page = 1, per_page = 20 } = data;
 
-    if (!clientes || !clientes.length) {
-        tbody.innerHTML = `<tr><td colspan="5" class="empty-state" style="padding:32px;">
-            <div class="empty-state-icon">👥</div>
-            No se encontraron clientes con los criterios de búsqueda.
-        </td></tr>`;
+    if (!clientes.length) {
+        tbody.innerHTML = `
+            <tr><td colspan="5" class="empty-state" style="padding:32px;">
+                <div class="empty-state-icon">👥</div>
+                No se encontraron clientes con los criterios de búsqueda.
+            </td></tr>`;
         document.getElementById('pagination-clientes').style.display = 'none';
         return;
     }
 
+    // ✅ escapeHtml() en cada campo de datos del servidor
     tbody.innerHTML = clientes.map(c => `
         <tr>
-            <td><strong>${c.nombre_razon_social}</strong></td>
-            <td>${c.documento_identificacion}</td>
-            <td><span class="badge badge-${c.tipo === 'Cliente' ? 'cliente' : 'prospecto'}">${c.tipo}</span></td>
-            <td><span class="badge badge-${c.estado === 'Activo' ? 'active' : 'inactive'}">${c.estado}</span></td>
+            <td><strong>${escapeHtml(c.nombre_razon_social)}</strong></td>
+            <td>${escapeHtml(c.documento_identificacion)}</td>
+            <td><span class="badge badge-${c.tipo === 'Cliente' ? 'cliente' : 'prospecto'}">${escapeHtml(c.tipo)}</span></td>
+            <td><span class="badge badge-${c.estado === 'Activo' ? 'active' : 'inactive'}">${escapeHtml(c.estado)}</span></td>
             <td>
                 <div class="td-actions">
-                    <a href="/form_cliente.html?id=${c.id_cliente}" class="btn btn-ghost btn-sm btn-icon" title="Editar">✏️</a>
+                    <a href="/form_cliente.html?id=${encodeURIComponent(c.id_cliente)}"
+                       class="btn btn-ghost btn-sm btn-icon" title="Editar">✏️</a>
                     ${c.estado === 'Activo'
-                        ? `<button class="btn btn-danger btn-sm btn-icon" onclick="inactivarCliente(${c.id_cliente})" title="Inactivar">🚫</button>`
+                        ? `<button class="btn btn-danger btn-sm btn-icon"
+                                   data-id="${encodeURIComponent(c.id_cliente)}"
+                                   onclick="inactivarCliente(this.dataset.id)"
+                                   title="Inactivar">🚫</button>`
                         : `<span style="font-size:0.75rem;color:var(--text2)">Inactivo</span>`
                     }
                 </div>
@@ -88,23 +81,27 @@ function renderTablaClientes(data) {
 }
 
 function renderPaginacion(total, page, per_page, wrapId, infoId, ctrlId, fn) {
-    const totalPages = Math.ceil(total / per_page);
+    const totalPages = Math.ceil(total / per_page) || 1;
     const wrap = document.getElementById(wrapId);
+    if (!wrap) return;
     wrap.style.display = 'flex';
 
     const desde = (page - 1) * per_page + 1;
     const hasta = Math.min(page * per_page, total);
-    document.getElementById(infoId).textContent = `Mostrando ${desde}–${hasta} de ${total} registros`;
+    // textContent en vez de innerHTML → seguro
+    const infoEl = document.getElementById(infoId);
+    if (infoEl) infoEl.textContent = `Mostrando ${desde}–${hasta} de ${total} registros`;
 
     const ctrl = document.getElementById(ctrlId);
+    if (!ctrl) return;
     ctrl.innerHTML = '';
 
     const addBtn = (label, pg, disabled = false, active = false) => {
         const b = document.createElement('button');
         b.className = `page-btn${active ? ' active' : ''}`;
-        b.innerHTML = label;
+        b.textContent = label;
         b.disabled = disabled;
-        if (!disabled) b.onclick = () => fn(pg);
+        if (!disabled) b.addEventListener('click', () => fn(pg));
         ctrl.appendChild(b);
     };
 
@@ -115,12 +112,15 @@ function renderPaginacion(total, page, per_page, wrapId, infoId, ctrlId, fn) {
     addBtn('›', page + 1, page === totalPages);
 }
 
-function buscarClientes() { cargarClientes(1); }
+function buscarClientes()  { cargarClientes(1); }
 
 function limpiarBusqueda() {
-    document.getElementById('search-nombre').value = '';
-    document.getElementById('search-documento').value = '';
-    document.getElementById('search-tipo').value = '';
+    ['search-nombre', 'search-documento'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const tipoEl = document.getElementById('search-tipo');
+    if (tipoEl) tipoEl.value = '';
     cargarClientes(1);
 }
 
@@ -132,465 +132,13 @@ function inactivarCliente(id) {
 async function confirmarInactivar() {
     if (!pendingInactivarId) return;
     try {
-        const res = await apiFetch(`/api/clientes/${pendingInactivarId}/inactivar`, { method: 'PATCH' });
-        if (!res) return;
-        const data = await res.json();
+        const data = await apiJSON(`/api/clientes/${pendingInactivarId}/inactivar`, { method: 'PATCH' });
+        if (!data) return;
         showToast(data.mensaje || 'Cliente inactivado.', 'success');
         cerrarModal('modal-inactivar');
         cargarClientes(currentPage);
     } catch (e) {
-        showToast('Error al inactivar el cliente.', 'error');
+        showToast(e.message || 'Error al inactivar el cliente.', 'error');
     }
     pendingInactivarId = null;
-}
-
-/* ── FORM PAGE ─────────────────────────────────────────── */
-let tiposContacto = [];
-let contactoIndex = 0;
-let activeTab = 'datos';
-
-if (typeof CLIENTE_ID !== 'undefined') {
-    document.addEventListener('DOMContentLoaded', async () => {
-        if (!requireAuth()) return;
-        await cargarTiposCliente();
-        await cargarTiposContacto();
-        if (CLIENTE_ID) {
-            cargarDatosCliente(CLIENTE_ID);
-        }
-        actualizarVistaContactos();
-    });
-}
-
-function cambiarTab(tabId) {
-    activeTab = tabId;
-    
-    document.querySelectorAll('.form-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.tab === tabId);
-    });
-    
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.toggle('active', content.id === `tab-${tabId}`);
-    });
-}
-
-function limpiarErrores() {
-    document.querySelectorAll('.error-msg').forEach(el => {
-        el.style.display = 'none';
-        el.textContent = '';
-    });
-    document.querySelectorAll('.input-error').forEach(el => {
-        el.classList.remove('input-error');
-    });
-}
-
-function mostrarError(elementId, mensaje) {
-    const errorEl = document.getElementById(`error-${elementId}`);
-    const inputEl = document.getElementById(elementId);
-    if (errorEl) {
-        errorEl.textContent = mensaje;
-        errorEl.style.display = 'block';
-    }
-    if (inputEl) {
-        inputEl.classList.add('input-error');
-    }
-}
-
-/* ── Validaciones de contacto por tipo ─────────────────── */
-const validacionesContacto = {
-    'Email': {
-        validar: (valor) => {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return emailRegex.test(valor);
-        },
-        mensaje: 'Ingrese un email válido (ej: usuario@dominio.com)',
-        placeholder: 'usuario@dominio.com'
-    },
-    'Teléfono': {
-        validar: (valor) => {
-            const soloNumeros = /^\d+$/;
-            return soloNumeros.test(valor) && valor.length === 8;
-        },
-        mensaje: 'El teléfono debe tener exactamente 8 dígitos numéricos',
-        placeholder: '12345678'
-    },
-    'Celular': {
-        validar: (valor) => {
-            const soloNumeros = /^\d+$/;
-            return soloNumeros.test(valor) && valor.length === 8;
-        },
-        mensaje: 'El celular debe tener exactamente 8 dígitos numéricos',
-        placeholder: '12345678'
-    },
-    'Fax': {
-        validar: (valor) => {
-            const soloNumeros = /^\d+$/;
-            return soloNumeros.test(valor) && valor.length === 8;
-        },
-        mensaje: 'El fax debe tener exactamente 8 dígitos numéricos',
-        placeholder: '12345678'
-    },
-    'Página web': {
-        validar: (valor) => {
-            const webRegex = /^(https?:\/\/|www\.)/i;
-            return webRegex.test(valor);
-        },
-        mensaje: 'La página web debe iniciar con www. o http://',
-        placeholder: 'www.ejemplo.com'
-    },
-    'Dirección': {
-        validar: (valor) => valor.trim().length > 0,
-        mensaje: 'Ingrese una dirección válida',
-        placeholder: 'Calle, número, zona, ciudad'
-    }
-};
-
-function validarContactoIndividual(tipoContacto, valor) {
-    if (!valor.trim()) {
-        return { valido: false, mensaje: 'Ingrese la descripción' };
-    }
-    
-    const validacion = validacionesContacto[tipoContacto];
-    if (validacion && !validacion.validar(valor)) {
-        return { valido: false, mensaje: validacion.mensaje };
-    }
-    
-    return { valido: true, mensaje: '' };
-}
-
-function getPlaceholderPorTipo(tipoContacto) {
-    const validacion = validacionesContacto[tipoContacto];
-    return validacion ? validacion.placeholder : 'Ingrese el valor';
-}
-
-function onTipoContactoChange(idx) {
-    const tipoSelect = document.getElementById(`contacto_tipo_${idx}`);
-    const descInput = document.getElementById(`contacto_desc_${idx}`);
-    
-    if (tipoSelect && descInput) {
-        const tipoSeleccionado = tipoSelect.value;
-        descInput.placeholder = getPlaceholderPorTipo(tipoSeleccionado);
-        
-        // Limpiar error previo al cambiar tipo
-        const errorEl = document.getElementById(`error-contacto_desc_${idx}`);
-        if (errorEl) {
-            errorEl.style.display = 'none';
-            errorEl.textContent = '';
-        }
-        descInput.classList.remove('input-error');
-        
-        // Validar valor actual si existe
-        if (descInput.value.trim() && tipoSeleccionado) {
-            validarInputContactoEnTiempoReal(idx);
-        }
-    }
-}
-
-function validarInputContactoEnTiempoReal(idx) {
-    const tipoSelect = document.getElementById(`contacto_tipo_${idx}`);
-    const descInput = document.getElementById(`contacto_desc_${idx}`);
-    const errorEl = document.getElementById(`error-contacto_desc_${idx}`);
-    
-    if (!tipoSelect || !descInput || !errorEl) return;
-    
-    const tipoContacto = tipoSelect.value;
-    const valor = descInput.value;
-    
-    if (!tipoContacto || !valor.trim()) {
-        errorEl.style.display = 'none';
-        descInput.classList.remove('input-error');
-        return;
-    }
-    
-    const resultado = validarContactoIndividual(tipoContacto, valor);
-    
-    if (!resultado.valido) {
-        errorEl.textContent = resultado.mensaje;
-        errorEl.style.display = 'block';
-        descInput.classList.add('input-error');
-    } else {
-        errorEl.style.display = 'none';
-        errorEl.textContent = '';
-        descInput.classList.remove('input-error');
-    }
-}
-
-async function cargarTiposCliente() {
-    try {
-        const res = await apiFetch('/api/clientes/tipos-cliente');
-        if (!res) return;
-        const data = await res.json();
-        const sel = document.getElementById('tipo');
-        if (!sel) return;
-        sel.innerHTML = '<option value="">Seleccione tipo...</option>';
-        data.forEach(t => {
-            const o = document.createElement('option');
-            o.value = t.descripcion;
-            o.textContent = t.descripcion;
-            sel.appendChild(o);
-        });
-        sel.value = 'Cliente';
-    } catch (e) {
-        console.error('Error cargando tipos de cliente:', e);
-    }
-}
-
-async function cargarTiposContacto() {
-    try {
-        const res = await apiFetch('/api/clientes/tipos-contacto');
-        if (!res) return;
-        tiposContacto = await res.json();
-    } catch (e) {
-        console.error('Error cargando tipos de contacto:', e);
-        tiposContacto = [
-            { id: 1, descripcion: 'Teléfono' },
-            { id: 2, descripcion: 'Celular' },
-            { id: 3, descripcion: 'Email' },
-            { id: 4, descripcion: 'Dirección' },
-            { id: 5, descripcion: 'Fax' },
-            { id: 6, descripcion: 'Página web' }
-        ];
-    }
-}
-
-async function cargarDatosCliente(id) {
-    try {
-        const res = await apiFetch(`/api/clientes/${id}`);
-        if (!res) return;
-        const d = await res.json();
-        
-        if (d.error) {
-            showToast(d.error, 'error');
-            return;
-        }
-        
-        document.getElementById('form-title').textContent = 'Editar Cliente';
-        document.getElementById('form-breadcrumb').textContent = 'Editar';
-        
-        document.getElementById('nombre_razon_social').value = d.nombre_razon_social || '';
-        document.getElementById('documento_identificacion').value = d.documento_identificacion || '';
-        document.getElementById('tipo').value = d.tipo || 'Cliente';
-        document.getElementById('fecha_nacimiento').value = d.fecha_nacimiento ? d.fecha_nacimiento.split('T')[0] : '';
-        
-        if (d.contactos && d.contactos.length > 0) {
-            d.contactos.forEach(c => {
-                agregarContacto(c);
-            });
-        }
-        actualizarVistaContactos();
-    } catch (e) {
-        showToast('Error al cargar datos del cliente.', 'error');
-        console.error(e);
-    }
-}
-
-function agregarContacto(contactoData = null) {
-    const container = document.getElementById('contactos-container');
-    const idx = contactoIndex++;
-    
-    const tipoOptions = tiposContacto.map(t => {
-        const isSelected = contactoData && (contactoData.tipo_contacto === t.descripcion || contactoData.id_tipo_contacto == t.id);
-        return `<option value="${t.descripcion}" ${isSelected ? 'selected' : ''}>${t.descripcion}</option>`;
-    }).join('');
-    
-    const tipoSeleccionado = contactoData?.tipo_contacto || '';
-    const placeholder = getPlaceholderPorTipo(tipoSeleccionado);
-    
-    const div = document.createElement('div');
-    div.className = 'contacto-card';
-    div.id = `contacto-${idx}`;
-    div.innerHTML = `
-        <input type="hidden" name="contacto_id_${idx}" value="${contactoData?.id_contacto || ''}">
-        <div class="form-group">
-            <label style="font-size:0.75rem;font-weight:500;color:var(--text2);">Tipo Contacto</label>
-            <select name="contacto_tipo_${idx}" id="contacto_tipo_${idx}" onchange="onTipoContactoChange(${idx})">
-                <option value="">Seleccione tipo</option>
-                ${tipoOptions}
-            </select>
-            <div id="error-contacto_tipo_${idx}" class="error-msg" style="display:none;"></div>
-        </div>
-        <div class="form-group">
-            <label style="font-size:0.75rem;font-weight:500;color:var(--text2);">Descripción</label>
-            <input type="text" name="contacto_desc_${idx}" id="contacto_desc_${idx}" 
-                   placeholder="${placeholder}" 
-                   value="${contactoData?.descripcion || ''}"
-                   oninput="validarInputContactoEnTiempoReal(${idx})">
-            <div id="error-contacto_desc_${idx}" class="error-msg" style="display:none;"></div>
-        </div>
-        <button type="button" class="btn btn-ghost btn-sm btn-icon btn-remove" onclick="eliminarContacto(${idx})" title="Eliminar">🗑️</button>
-    `;
-    container.appendChild(div);
-    actualizarVistaContactos();
-}
-
-function eliminarContacto(idx) {
-    const el = document.getElementById(`contacto-${idx}`);
-    if (el) el.remove();
-    actualizarVistaContactos();
-}
-
-function actualizarVistaContactos() {
-    const container = document.getElementById('contactos-container');
-    const empty = document.getElementById('contactos-empty');
-    if (!container || !empty) return;
-    
-    const tieneContactos = container.children.length > 0;
-    empty.style.display = tieneContactos ? 'none' : 'block';
-}
-
-function obtenerContactos() {
-    const contactos = [];
-    const container = document.getElementById('contactos-container');
-    if (!container) return contactos;
-    
-    const items = container.querySelectorAll('.contacto-item');
-    items.forEach(item => {
-        const idInput = item.querySelector('input[name^="contacto_id_"]');
-        const tipoSelect = item.querySelector('select[name^="contacto_tipo_"]');
-        const descInput = item.querySelector('input[name^="contacto_desc_"]');
-        
-        if (tipoSelect && descInput && descInput.value.trim()) {
-            contactos.push({
-                id_contacto: idInput?.value ? parseInt(idInput.value) : null,
-                tipo_contacto: tipoSelect.value || 'Teléfono',
-                descripcion: descInput.value.trim()
-            });
-        }
-    });
-    return contactos;
-}
-
-function validarFormulario() {
-    limpiarErrores();
-    let isValid = true;
-    let tieneErroresContactos = false;
-    
-    const nombre = document.getElementById('nombre_razon_social').value.trim();
-    const documento = document.getElementById('documento_identificacion').value.trim();
-    const tipo = document.getElementById('tipo').value;
-    
-    if (!nombre) {
-        mostrarError('nombre_razon_social', 'El Nombre o Razón Social es obligatorio');
-        isValid = false;
-    }
-    
-    if (!documento) {
-        mostrarError('documento_identificacion', 'El Documento de Identificación es obligatorio');
-        isValid = false;
-    }
-    
-    if (!tipo) {
-        mostrarError('tipo', 'El Tipo es obligatorio');
-        isValid = false;
-    }
-    
-    const container = document.getElementById('contactos-container');
-    const items = container.querySelectorAll('.contacto-card');
-    items.forEach((item, index) => {
-        const tipoSelect = item.querySelector('select[name^="contacto_tipo_"]');
-        const descInput = item.querySelector('input[name^="contacto_desc_"]');
-        const tipoId = tipoSelect?.id;
-        const descId = descInput?.id;
-        
-        // Validar que se haya seleccionado un tipo
-        if (tipoSelect && !tipoSelect.value) {
-            const errorEl = document.getElementById(`error-${tipoId}`);
-            if (errorEl) {
-                errorEl.textContent = 'Seleccione un tipo de contacto';
-                errorEl.style.display = 'block';
-            }
-            tipoSelect.classList.add('input-error');
-            isValid = false;
-            tieneErroresContactos = true;
-        }
-        
-        // Validar descripción con las reglas específicas por tipo
-        if (descInput && tipoSelect) {
-            const tipoContacto = tipoSelect.value;
-            const valorDesc = descInput.value;
-            
-            if (!valorDesc.trim()) {
-                const errorEl = document.getElementById(`error-${descId}`);
-                if (errorEl) {
-                    errorEl.textContent = 'Ingrese la descripción';
-                    errorEl.style.display = 'block';
-                }
-                descInput.classList.add('input-error');
-                isValid = false;
-                tieneErroresContactos = true;
-            } else if (tipoContacto) {
-                // Validar formato según el tipo de contacto
-                const resultado = validarContactoIndividual(tipoContacto, valorDesc);
-                if (!resultado.valido) {
-                    const errorEl = document.getElementById(`error-${descId}`);
-                    if (errorEl) {
-                        errorEl.textContent = resultado.mensaje;
-                        errorEl.style.display = 'block';
-                    }
-                    descInput.classList.add('input-error');
-                    isValid = false;
-                    tieneErroresContactos = true;
-                }
-            }
-        }
-    });
-    
-    if (!isValid && tieneErroresContactos && activeTab !== 'contactos') {
-        cambiarTab('contactos');
-    } else if (!isValid && !tieneErroresContactos && activeTab !== 'datos') {
-        cambiarTab('datos');
-    }
-    
-    return isValid;
-}
-
-async function guardarCliente() {
-    if (!validarFormulario()) {
-        return;
-    }
-    
-    const nombre = document.getElementById('nombre_razon_social').value.trim();
-    const documento = document.getElementById('documento_identificacion').value.trim();
-    const tipo = document.getElementById('tipo').value;
-    
-    const payload = {
-        nombre_razon_social: nombre,
-        documento_identificacion: documento,
-        tipo: tipo,
-        fecha_nacimiento: document.getElementById('fecha_nacimiento').value || null,
-        contactos: obtenerContactos()
-    };
-    
-    const btn = document.getElementById('btn-guardar');
-    btn.disabled = true;
-    btn.textContent = 'Guardando...';
-    
-    try {
-        const isEdit = CLIENTE_ID !== null;
-        const url = isEdit ? `/api/clientes/${CLIENTE_ID}` : '/api/clientes';
-        const method = isEdit ? 'PUT' : 'POST';
-        
-        const res = await apiFetch(url, {
-            method: method,
-            body: JSON.stringify(payload)
-        });
-        
-        if (!res) return;
-        const data = await res.json();
-        
-        if (data.error) {
-            showToast(data.error, 'error');
-            btn.disabled = false;
-            btn.textContent = '💾 Guardar';
-            return;
-        }
-        
-        showToast(data.mensaje || (isEdit ? 'Cliente actualizado.' : 'Cliente registrado exitosamente.'), 'success');
-        setTimeout(() => window.location.href = '/clientes.html', 1200);
-        
-    } catch (e) {
-        showToast('Error al guardar el cliente.', 'error');
-        btn.disabled = false;
-        btn.textContent = '💾 Guardar';
-        console.error(e);
-    }
 }

@@ -2,13 +2,14 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:5000;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Proveedores — CRM Ing Software</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <!-- Sidebar se inyecta via JS -->
-  
+
   <div class="main">
     <div class="topbar">
       <span class="topbar-breadcrumb">
@@ -21,10 +22,11 @@
         <a href="/form_proveedor.html" class="btn btn-gold">＋ Nuevo Proveedor</a>
       </div>
 
+      <!-- INCONSISTENCIA #2 CORREGIDA: placeholder correcto + campo único busca nombre O NIT -->
       <div class="search-bar">
         <div class="form-group">
-          <label>Buscar</label>
-          <input type="text" id="search-nombre" placeholder="Nombre o NIT...">
+          <label>Buscar por nombre o NIT</label>
+          <input type="text" id="search-nombre" placeholder="Nombre de empresa o NIT...">
         </div>
         <div class="form-group" style="max-width:200px;">
           <label>Categoría</label>
@@ -82,12 +84,25 @@
     </div>
   </div>
 
+  <!-- Modal activar (MEJORA: reemplaza confirm() nativo del navegador) -->
+  <div class="modal-overlay" id="modal-activar">
+    <div class="modal">
+      <div class="modal-icon" style="background:rgba(46,204,138,.12);border:1px solid rgba(46,204,138,.3);">✅</div>
+      <div class="modal-title">Activar Proveedor</div>
+      <div class="modal-body">¿Deseas activar este proveedor? Podrá volver a usarse en nuevas compras.</div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="cerrarModal('modal-activar')">Cancelar</button>
+        <button class="btn btn-gold" onclick="confirmarActivar()">Activar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal eliminar -->
   <div class="modal-overlay" id="modal-eliminar">
     <div class="modal">
       <div class="modal-icon warning">🗑️</div>
       <div class="modal-title">¿Eliminar proveedor?</div>
-      <div class="modal-body">Esta acción es permanente y no se puede deshacer.</div>
+      <div class="modal-body">Esta acción es permanente y no se puede deshacer. Solo es posible si el proveedor no tiene compras registradas.</div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="cerrarModal('modal-eliminar')">Cancelar</button>
         <button class="btn btn-danger" onclick="confirmarEliminar()">Eliminar</button>

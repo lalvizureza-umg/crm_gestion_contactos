@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' http://localhost:5000;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Formulario Proveedor — CRM Ing Software</title>
   <link rel="stylesheet" href="css/styles.css">
@@ -80,8 +81,11 @@
     // Obtener ID del proveedor de la URL (para edición)
     var PROVEEDOR_ID = (function(){
       const params = new URLSearchParams(window.location.search);
-      const id = params.get('id');
-      return id ? parseInt(id) : null;
+      const raw = params.get('id');
+      if (!raw) return null;
+      const parsed = parseInt(raw, 10);
+      // Validar que sea un entero positivo válido (rechaza NaN, 0, negativos)
+      return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
     })();
   </script>
   <script src="js/proveedores.js"></script>

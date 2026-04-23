@@ -1,14 +1,5 @@
 // empleados.js — CRM Ing Software
 
-function showToast(msg, type='success'){
-  const c = document.getElementById('toast-container');
-  if(!c) return;
-  const t = document.createElement('div');
-  t.className = `toast ${type}`;
-  t.innerHTML = `<span>${{success:'✅',error:'❌',warning:'⚠️'}[type]||'💬'}</span><span>${msg}</span>`;
-  c.appendChild(t);
-  setTimeout(()=>t.remove(), 4500);
-}
 
 function cerrarModal(id){ document.getElementById(id)?.classList.remove('open'); }
 function abrirModal(id){ document.getElementById(id)?.classList.add('open'); }
@@ -79,16 +70,16 @@ function renderTabla(items, total, page, per_page){
   
   tbody.innerHTML = items.map(e => `
     <tr>
-      <td><strong>${e.numero_empleado}</strong></td>
-      <td><strong>${e.nombre_completo}</strong></td>
-      <td>${e.cargo || '—'}</td>
-      <td>${e.dependencia || 'Sin asignar'}</td>
-      <td><span class="badge ${e.estado==='Activo' ? 'badge-active' : 'badge-inactive'}">${e.estado}</span></td>
-      <td style="font-size:0.78rem;">${e.correo || e.correo_empresarial || '—'}</td>
+      <td><strong>${escapeHtml(e.numero_empleado || "")}</strong></td>
+      <td><strong>${escapeHtml(e.nombre_completo)}</strong></td>
+      <td>${escapeHtml(e.cargo || '—')}</td>
+      <td>${escapeHtml(e.dependencia || 'Sin asignar')}</td>
+      <td><span class="badge ${e.estado==='Activo' ? 'badge-active' : 'badge-inactive'}">${escapeHtml(e.estado)}</span></td>
+      <td style="font-size:0.78rem;">${escapeHtml(e.correo || e.correo_empresarial || '—')}</td>
       <td class="td-actions">
         <a href="/form_empleado.html?id=${e.id_empleado}" class="btn btn-ghost btn-sm btn-icon" title="Editar">✏️</a>
         <button class="btn btn-ghost btn-sm btn-icon" title="Reasignar dependencia"
-          onclick="abrirReasignar(${e.id_empleado},'${e.nombre_completo.replace(/'/g,"\\'")}')">🔄</button>
+          onclick="abrirReasignar(${e.id_empleado},this.dataset.nombre" data-nombre="${escapeHtml(e.nombre_completo)})">🔄</button>
       </td>
     </tr>`).join('');
 
