@@ -4,6 +4,7 @@ Correcciones:
   - Context manager en todas las funciones (no fugas de conexión)
   - OFFSET/FETCH parametrizados
   - Manejo de excepciones con logging
+  - Conversión de filas a diccionarios con función auxiliar
 """
 import logging
 from database import db_connection
