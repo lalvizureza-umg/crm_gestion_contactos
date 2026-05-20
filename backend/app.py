@@ -117,6 +117,32 @@ def internal_error(e):
     logger.error("Error interno: %s", e, exc_info=True)
     return jsonify({"error": "Error interno del servidor"}), 500
 
+# ─── Catálogo de cargos y jerarquía de empleados ─────────────────────
+
+@app.route("/api/empleados/cargos", methods=["GET"])
+@token_required
+def api_get_cargos():
+    return jsonify(empleados_mod.get_all_cargos())
+
+
+@app.route("/api/empleados/supervisores", methods=["GET"])
+@token_required
+def api_get_supervisores():
+    return jsonify(empleados_mod.get_supervisores())
+
+@app.route("/api/empleados/managers", methods=["GET"])
+@token_required
+def api_get_managers():
+    return jsonify(empleados_mod.get_managers())
+
+
+@app.route("/api/empleados/manager-por-supervisor/<int:id_supervisor>", methods=["GET"])
+@token_required
+def api_get_manager_por_supervisor(id_supervisor):
+    result = empleados_mod.get_manager_por_supervisor(id_supervisor)
+    if isinstance(result, dict) and result.get("error"):
+        return jsonify(result), 400
+    return jsonify(result)
 
 # ── Health Check ──────────────────────────────────────────────
 @app.route("/api/health", methods=["GET"])

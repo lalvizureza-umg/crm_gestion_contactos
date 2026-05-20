@@ -42,8 +42,11 @@
             <input type="text" id="nombre_completo" placeholder="Nombre completo del empleado">
           </div>
           <div class="form-group">
-            <label>Cargo</label>
-            <input type="text" id="cargo" placeholder="Analista, Coordinador...">
+            <label>Cargo *</label>
+            <select id="id_cargo" onchange="manejarCambioCargo()">
+              <option value="">Seleccione un cargo</option>
+            </select>
+            <input type="hidden" id="cargo">
           </div>
           <div class="form-group">
             <label>Dependencia</label>
@@ -51,6 +54,21 @@
               <option value="">Sin asignar</option>
             </select>
           </div>
+
+          <div class="form-group" id="grupo_supervisor">
+            <label>Supervisor</label>
+            <select id="id_supervisor" onchange="cargarManagerPorSupervisor()">
+              <option value="">Seleccione un supervisor</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="grupo_manager">
+            <label>Manager</label>
+            <select id="id_manager">
+              <option value="">Seleccione un manager</option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label>Estado</label>
             <select id="estado">
@@ -58,9 +76,15 @@
               <option value="Inactivo">Inactivo</option>
             </select>
           </div>
+
           <div class="form-group">
             <label>Fecha de Nacimiento</label>
-            <input type="date" id="fecha_nacimiento">
+            <input type="date" id="fecha_nacimiento" onchange="calcularDiasCumpleanos()">
+          </div>
+
+          <div class="form-group">
+            <label>Días para Cumpleaños</label>
+            <input type="text" id="dias_cumpleanos" placeholder="Se calcula automáticamente" readonly>
           </div>
           <div class="form-group">
             <label>Teléfono</label>
